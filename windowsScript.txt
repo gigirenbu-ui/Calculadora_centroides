@@ -1,0 +1,2 @@
+.venv\Scripts\activate    => Activación del entorno virtual
+Set-ExecutionPolicy Bypass -Scope Process    => Permiso de ejecución de comandos en powershell windows
