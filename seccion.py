@@ -1,34 +1,75 @@
 import numpy as np
 
+def polygon_properties(vertices):
+    """
+    Calcula área, centroide y momentos de inercia (Ix, Iy, Ixy) de un polígono
+    dado por una lista de vértices (x,y) en orden (antihorario u horario).
+    Retorna (area, centroide, Ix, Iy, Ixy) respecto al origen (0,0).
+    """
+    n = len(vertices)
+    if n < 3:
+        raise ValueError("Se necesitan al menos 3 vértices")
+    area = 0.0
+    Cx = 0.0
+    Cy = 0.0
+    Ix = 0.0
+    Iy = 0.0
+    Ixy = 0.0
+    for i in range(n):
+        x1, y1 = vertices[i]
+        x2, y2 = vertices[(i+1) % n]
+        f = x1*y2 - x2*y1
+        area += f
+        Cx += (x1 + x2) * f
+        Cy += (y1 + y2) * f
+        Ix += (y1**2 + y1*y2 + y2**2) * f
+        Iy += (x1**2 + x1*x2 + x2**2) * f
+        Ixy += (x1*y2 + 2*x1*y1 + 2*x2*y2 + x2*y1) * f
+    area = abs(area) / 2.0
+    if area == 0:
+        raise ValueError("Área cero")
+    Cx = abs(Cx) / (6.0 * area)
+    Cy = abs(Cy) / (6.0 * area)
+    Ix = abs(Ix) / 12.0
+    Iy = abs(Iy) / 12.0
+    Ixy = abs(Ixy) / 24.0
+    # Trasladar momentos al centroide (teorema de Steiner)
+    Ix_c = Ix - area * Cy**2
+    Iy_c = Iy - area * Cx**2
+    Ixy_c = Ixy - area * Cx * Cy
+    return area, (Cx, Cy), Ix_c, Iy_c, Ixy_c
+
+
 class SubArea:
-    def __init__(self, tipo, params, centroide_local, area, es_vacio=False):
-        self.tipo = tipo
-        self.params = params
-        self.centroide_local = np.array(centroide_local)
-        self.area = area
+    def __init__(self, tipo, params, vertices, es_vacio=False):
+        self.tipo = tipo          # 'rectangulo', 'triangulo', 'circulo'
+        self.params = params      # diccionario con parámetros originales (para referencia)
+        self.vertices = vertices  # lista de (x,y) para polígonos, None para círculo
         self.es_vacio = es_vacio
+        # Calcular propiedades geométricas
+        if tipo == 'circulo':
+            radio = params['radio']
+            centro = (params['cx'], params['cy'])
+            self.area = np.pi * radio**2
+            self.centroide = np.array(centro)
+            self.Ix_local = (np.pi * radio**4) / 4
+            self.Iy_local = self.Ix_local
+            self.Ixy_local = 0.0
+        else:
+            # polígono: rectángulo o triángulo (o cualquier polígono dado por vértices)
+            area, centroide, Ix, Iy, Ixy = polygon_properties(vertices)
+            self.area = area
+            self.centroide = np.array(centroide)
+            self.Ix_local = Ix
+            self.Iy_local = Iy
+            self.Ixy_local = Ixy
 
     def get_area_efectiva(self):
         return -self.area if self.es_vacio else self.area
 
     def momento_inercia_local(self):
-        if self.tipo == 'rectangulo':
-            b = self.params['ancho']
-            h = self.params['alto']
-            Ix = (b * h**3) / 12
-            Iy = (h * b**3) / 12
-        elif self.tipo == 'circulo':
-            r = self.params['radio']
-            Ix = (np.pi * r**4) / 4
-            Iy = Ix
-        elif self.tipo == 'triangulo':
-            b = self.params['base']
-            h = self.params['altura']
-            Ix = (b * h**3) / 36
-            Iy = (h * b**3) / 36
-        else:
-            raise ValueError(f"Tipo {self.tipo} no implementado")
-        return Ix, Iy
+        return self.Ix_local, self.Iy_local
+
 
 class SeccionCompuesta:
     def __init__(self):
@@ -44,8 +85,8 @@ class SeccionCompuesta:
         for sa in self.subareas:
             A_efect = sa.get_area_efectiva()
             A_total += A_efect
-            sum_xA += A_efect * sa.centroide_local[0]
-            sum_yA += A_efect * sa.centroide_local[1]
+            sum_xA += A_efect * sa.centroide[0]
+            sum_yA += A_efect * sa.centroide[1]
         if A_total == 0:
             raise ValueError("Área total cero")
         xc = sum_xA / A_total
@@ -56,11 +97,11 @@ class SeccionCompuesta:
         Ixy_total = 0.0
         for sa in self.subareas:
             A_efect = sa.get_area_efectiva()
-            dx = sa.centroide_local[0] - xc
-            dy = sa.centroide_local[1] - yc
-            Ix_local, Iy_local = sa.momento_inercia_local()
-            Ix_total += Ix_local + A_efect * dy**2
-            Iy_total += Iy_local + A_efect * dx**2
+            dx = sa.centroide[0] - xc
+            dy = sa.centroide[1] - yc
+            Ix_loc, Iy_loc = sa.momento_inercia_local()
+            Ix_total += Ix_loc + A_efect * dy**2
+            Iy_total += Iy_loc + A_efect * dx**2
             Ixy_total += A_efect * dx * dy
 
         I_prom = (Ix_total + Iy_total) / 2

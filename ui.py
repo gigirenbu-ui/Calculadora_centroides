@@ -2,11 +2,11 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.patches import Rectangle, Circle, Polygon
+from matplotlib.patches import Polygon as MplPolygon, Circle as MplCircle
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QLineEdit, QComboBox, QGroupBox, QFormLayout,
-                             QHeaderView)
+                             QHeaderView, QCheckBox, QTextEdit, QMessageBox)
 from PyQt5.QtCore import Qt
 
 from seccion import SeccionCompuesta, SubArea
@@ -15,7 +15,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Propiedades Geométricas - Sección Compuesta")
-        self.setGeometry(100, 100, 1400, 800)
+        self.setGeometry(100, 100, 1500, 800)
 
         self.seccion = SeccionCompuesta()
 
@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
 
         # Panel derecho: controles y tabla
         panel_derecho = QWidget()
-        panel_derecho.setMaximumWidth(500)
+        panel_derecho.setMaximumWidth(650)
         layout_der = QVBoxLayout(panel_derecho)
 
         # Grupo agregar subárea
@@ -41,20 +41,40 @@ class MainWindow(QMainWindow):
         form_layout = QFormLayout()
 
         self.tipo_combo = QComboBox()
-        self.tipo_combo.addItems(["Rectángulo", "Círculo", "Triángulo"])
+        self.tipo_combo.addItems(["Rectángulo", "Triángulo", "Círculo"])
         form_layout.addRow("Tipo:", self.tipo_combo)
 
-        self.param1_label = QLabel("Ancho (cm):")
+        # --- Parámetros estándar (para generación automática) ---
+        self.param1_label = QLabel("Base/Ancho (cm):")
         self.param1_input = QLineEdit()
         form_layout.addRow(self.param1_label, self.param1_input)
 
-        self.param2_label = QLabel("Alto (cm):")
+        self.param2_label = QLabel("Altura (cm):")
         self.param2_input = QLineEdit()
         form_layout.addRow(self.param2_label, self.param2_input)
 
-        self.ref_label = QLabel("Punto de referencia:")
+        # Para triángulo escaleno (desplazamiento)
+        self.extra_label = QLabel("Desplazamiento X (cm):")
+        self.extra_input = QLineEdit("0")
+        self.extra_label.setVisible(False)
+        self.extra_input.setVisible(False)
+        form_layout.addRow(self.extra_label, self.extra_input)
+
+        # --- Opción de vértices manuales ---
+        self.use_vertices_check = QCheckBox("Usar coordenadas manuales de vértices")
+        form_layout.addRow(self.use_vertices_check)
+
+        self.vertices_label = QLabel("Vértices (x,y; x,y; ...):")
+        self.vertices_text = QTextEdit()
+        self.vertices_text.setPlaceholderText("Ejemplo: 0,0; 30,0; 30,20; 0,20")
+        self.vertices_text.setMaximumHeight(80)
+        self.vertices_label.setVisible(False)
+        self.vertices_text.setVisible(False)
+        form_layout.addRow(self.vertices_label, self.vertices_text)
+
+        self.ref_label = QLabel("Punto de referencia (solo automático):")
         self.ref_label.setStyleSheet("font-weight: bold;")
-        form_layout.addRow(self.ref_label, QLabel(""))
+        form_layout.addRow(self.ref_label)
 
         self.ref_x_label = QLabel("Coordenada X:")
         self.ref_x_input = QLineEdit("0")
@@ -98,75 +118,122 @@ class MainWindow(QMainWindow):
         layout_principal.addWidget(panel_derecho, 2)
 
         # Conexiones
-        self.tipo_combo.currentTextChanged.connect(self.actualizar_campos_parametros)
+        self.tipo_combo.currentTextChanged.connect(self.actualizar_campos_por_tipo)
+        self.use_vertices_check.stateChanged.connect(self.toggle_vertices_mode)
         self.btn_agregar.clicked.connect(self.agregar_subarea)
         self.btn_calcular.clicked.connect(self.calcular_y_dibujar)
         self.btn_limpiar.clicked.connect(self.limpiar_todo)
 
-        self.actualizar_campos_parametros()
+        self.actualizar_campos_por_tipo()
+        self.toggle_vertices_mode()
 
-    def actualizar_campos_parametros(self):
+    def toggle_vertices_mode(self):
+        visible = self.use_vertices_check.isChecked()
+        self.vertices_label.setVisible(visible)
+        self.vertices_text.setVisible(visible)
+        # Ocultar/mostrar parámetros automáticos
+        self.param1_input.setEnabled(not visible)
+        self.param2_input.setEnabled(not visible)
+        self.extra_input.setEnabled(not visible)
+        self.ref_x_input.setEnabled(not visible)
+        self.ref_y_input.setEnabled(not visible)
+
+    def actualizar_campos_por_tipo(self):
         tipo = self.tipo_combo.currentText()
-        if tipo == "Rectángulo":
-            self.param1_label.setText("Ancho (cm):")
-            self.param2_label.setText("Alto (cm):")
-            self.param1_input.setEnabled(True)
-            self.param2_input.setEnabled(True)
-            self.ref_label.setText("Punto de referencia: Esquina inferior izquierda")
-        elif tipo == "Círculo":
+        if tipo == "Círculo":
             self.param1_label.setText("Radio (cm):")
             self.param2_label.setText("(No usar)")
             self.param2_input.setEnabled(False)
             self.param2_input.clear()
             self.param1_input.setEnabled(True)
+            self.extra_label.setVisible(False)
+            self.extra_input.setVisible(False)
             self.ref_label.setText("Punto de referencia: Centro")
-        elif tipo == "Triángulo":
-            self.param1_label.setText("Base (cm):")
-            self.param2_label.setText("Altura (cm):")
-            self.param1_input.setEnabled(True)
+            # Para círculo no aplica vértices manuales
+            self.use_vertices_check.setEnabled(False)
+            self.use_vertices_check.setChecked(False)
+            self.toggle_vertices_mode()
+        else:
+            self.use_vertices_check.setEnabled(True)
             self.param2_input.setEnabled(True)
-            self.ref_label.setText("Punto de referencia: Vértice inferior izquierdo de la base")
+            if tipo == "Rectángulo":
+                self.param1_label.setText("Ancho (cm):")
+                self.param2_label.setText("Alto (cm):")
+                self.extra_label.setVisible(False)
+                self.extra_input.setVisible(False)
+            else:  # Triángulo
+                self.param1_label.setText("Base (cm):")
+                self.param2_label.setText("Altura (cm):")
+                self.extra_label.setVisible(True)
+                self.extra_input.setVisible(True)
+            # Si estaba en modo vértices, mantener
+            self.toggle_vertices_mode()
+
+    def parse_vertices(self, text):
+        """Parsea una cadena con formato 'x1,y1; x2,y2; ...' y devuelve lista de (float,float)."""
+        vertices = []
+        text = text.replace('\n', ';')
+        parts = text.split(';')
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            coords = part.split(',')
+            if len(coords) != 2:
+                raise ValueError(f"Formato incorrecto en: '{part}'. Use x,y")
+            x = float(coords[0].strip())
+            y = float(coords[1].strip())
+            vertices.append((x, y))
+        if len(vertices) < 3:
+            raise ValueError("Se requieren al menos 3 vértices")
+        return vertices
 
     def agregar_subarea(self):
         try:
             tipo = self.tipo_combo.currentText()
             es_vacio = (self.vacio_check.currentText() == "Vacío")
-            ref_x = float(self.ref_x_input.text())
-            ref_y = float(self.ref_y_input.text())
 
-            if tipo == "Rectángulo":
-                ancho = float(self.param1_input.text())
-                alto = float(self.param2_input.text())
-                centroide_x = ref_x + ancho / 2
-                centroide_y = ref_y + alto / 2
-                area = ancho * alto
-                params = {'ancho': ancho, 'alto': alto, 'ref_x': ref_x, 'ref_y': ref_y}
-                sa = SubArea('rectangulo', params, (centroide_x, centroide_y), area, es_vacio)
-            elif tipo == "Círculo":
+            if tipo == "Círculo":
                 radio = float(self.param1_input.text())
-                centroide_x = ref_x
-                centroide_y = ref_y
-                area = np.pi * radio**2
-                params = {'radio': radio, 'ref_x': ref_x, 'ref_y': ref_y}
-                sa = SubArea('circulo', params, (centroide_x, centroide_y), area, es_vacio)
-            elif tipo == "Triángulo":
-                base = float(self.param1_input.text())
-                altura = float(self.param2_input.text())
-                centroide_x = ref_x + base / 3
-                centroide_y = ref_y + altura / 3
-                area = (base * altura) / 2
-                params = {'base': base, 'altura': altura, 'ref_x': ref_x, 'ref_y': ref_y}
-                sa = SubArea('triangulo', params, (centroide_x, centroide_y), area, es_vacio)
+                cx = float(self.ref_x_input.text())
+                cy = float(self.ref_y_input.text())
+                params = {'radio': radio, 'cx': cx, 'cy': cy}
+                sa = SubArea('circulo', params, None, es_vacio)
+
             else:
-                return
+                use_manual = self.use_vertices_check.isChecked()
+                if use_manual:
+                    vertices_text = self.vertices_text.toPlainText()
+                    vertices = self.parse_vertices(vertices_text)
+                    params = {'vertices_manual': vertices}
+                    sa = SubArea(tipo.lower(), params, vertices, es_vacio)
+                else:
+                    # Generar vértices automáticamente
+                    base = float(self.param1_input.text())
+                    altura = float(self.param2_input.text())
+                    ref_x = float(self.ref_x_input.text())
+                    ref_y = float(self.ref_y_input.text())
+                    if tipo == "Rectángulo":
+                        vertices = [(ref_x, ref_y),
+                                    (ref_x + base, ref_y),
+                                    (ref_x + base, ref_y + altura),
+                                    (ref_x, ref_y + altura)]
+                        params = {'base': base, 'altura': altura, 'ref_x': ref_x, 'ref_y': ref_y}
+                    else:  # Triángulo
+                        desplazamiento = float(self.extra_input.text())
+                        desplazamiento = max(0, min(desplazamiento, base))
+                        vertices = [(ref_x, ref_y),
+                                    (ref_x + base, ref_y),
+                                    (ref_x + desplazamiento, ref_y + altura)]
+                        params = {'base': base, 'altura': altura, 'desplazamiento': desplazamiento,
+                                  'ref_x': ref_x, 'ref_y': ref_y}
+                    sa = SubArea(tipo.lower(), params, vertices, es_vacio)
 
             self.seccion.agregar_subarea(sa)
             self.actualizar_tabla()
             self.calcular_y_dibujar()
-        except ValueError as e:
-            self.resultados_label.setText(f"Error en datos: {str(e)}")
         except Exception as e:
-            self.resultados_label.setText(f"Error: {str(e)}")
+            QMessageBox.critical(self, "Error", f"No se pudo agregar la figura:\n{str(e)}")
 
     def actualizar_tabla(self):
         self.tabla_resultados.setRowCount(len(self.seccion.subareas))
@@ -175,8 +242,8 @@ class MainWindow(QMainWindow):
         suma_yA = 0
         for i, sa in enumerate(self.seccion.subareas):
             area_efectiva = sa.get_area_efectiva()
-            x_cent = sa.centroide_local[0]
-            y_cent = sa.centroide_local[1]
+            x_cent = sa.centroide[0]
+            y_cent = sa.centroide[1]
             xA = area_efectiva * x_cent
             yA = area_efectiva * y_cent
             suma_A += area_efectiva
@@ -230,69 +297,42 @@ class MainWindow(QMainWindow):
         ax.set_ylabel("y (cm)")
         ax.set_title("Sección Compuesta")
 
-        # Dibujar cada subárea
         for sa in self.seccion.subareas:
             color = 'lightgray' if not sa.es_vacio else 'white'
             edgecolor = 'black'
             alpha = 0.6 if not sa.es_vacio else 0.8
 
-            if sa.tipo == 'rectangulo':
-                ancho = sa.params['ancho']
-                alto = sa.params['alto']
-                ref_x = sa.params['ref_x']
-                ref_y = sa.params['ref_y']
-                rect = Rectangle((ref_x, ref_y), ancho, alto,
-                                 facecolor=color, edgecolor=edgecolor, alpha=alpha)
-                ax.add_patch(rect)
-                # Marcar punto de referencia
-                ax.plot(ref_x, ref_y, 'bo', markersize=4, alpha=0.7)
-
-            elif sa.tipo == 'circulo':
+            if sa.tipo == 'circulo':
                 radio = sa.params['radio']
-                centro_x = sa.centroide_local[0]
-                centro_y = sa.centroide_local[1]
-                circle = Circle((centro_x, centro_y), radio,
-                                facecolor=color, edgecolor=edgecolor, alpha=alpha)
+                cx, cy = sa.centroide
+                circle = MplCircle((cx, cy), radio, facecolor=color, edgecolor=edgecolor, alpha=alpha)
                 ax.add_patch(circle)
+                ax.plot(cx, cy, 'bo', markersize=4, alpha=0.7)
+            else:
+                # polígono (rectángulo o triángulo)
+                vertices = sa.vertices
+                polygon = MplPolygon(vertices, facecolor=color, edgecolor=edgecolor, alpha=alpha)
+                ax.add_patch(polygon)
+                # Marcar el primer vértice como referencia (si se generó automáticamente, es el punto de referencia)
+                ax.plot(vertices[0][0], vertices[0][1], 'bo', markersize=4, alpha=0.7)
 
-            elif sa.tipo == 'triangulo':
-                base = sa.params['base']
-                altura = sa.params['altura']
-                ref_x = sa.params['ref_x']
-                ref_y = sa.params['ref_y']
-                vertices = [(ref_x, ref_y),
-                            (ref_x + base, ref_y),
-                            (ref_x + base/2, ref_y + altura)]
-                triangle = Polygon(vertices, facecolor=color,
-                                   edgecolor=edgecolor, alpha=alpha)
-                ax.add_patch(triangle)
-
-        # Dibujar centroide global
+        # Centroide global
         cx_glob, cy_glob = props['centroide']
         ax.plot(cx_glob, cy_glob, 'ro', markersize=8, label='Centroide global')
 
-        # Calcular rango de visualización incluyendo el origen (0,0) y todas las figuras
-        x_vals = []
-        y_vals = []
+        # Calcular límites incluyendo el origen y todas las figuras
+        x_vals = [0]
+        y_vals = [0]
         for sa in self.seccion.subareas:
-            if sa.tipo == 'rectangulo':
-                x_vals.extend([sa.params['ref_x'], sa.params['ref_x'] + sa.params['ancho']])
-                y_vals.extend([sa.params['ref_y'], sa.params['ref_y'] + sa.params['alto']])
-            elif sa.tipo == 'circulo':
+            if sa.tipo == 'circulo':
                 r = sa.params['radio']
-                x_vals.extend([sa.centroide_local[0] - r, sa.centroide_local[0] + r])
-                y_vals.extend([sa.centroide_local[1] - r, sa.centroide_local[1] + r])
-            elif sa.tipo == 'triangulo':
-                base = sa.params['base']
-                altura = sa.params['altura']
-                ref_x = sa.params['ref_x']
-                ref_y = sa.params['ref_y']
-                x_vals.extend([ref_x, ref_x + base])
-                y_vals.extend([ref_y, ref_y + altura])
-
-        # Incluir el origen (0,0)
-        x_vals.append(0)
-        y_vals.append(0)
+                cx, cy = sa.centroide
+                x_vals.extend([cx - r, cx + r])
+                y_vals.extend([cy - r, cy + r])
+            else:
+                for v in sa.vertices:
+                    x_vals.append(v[0])
+                    y_vals.append(v[1])
 
         if x_vals and y_vals:
             x_min, x_max = min(x_vals), max(x_vals)
@@ -302,13 +342,12 @@ class MainWindow(QMainWindow):
             ax.set_xlim(x_min - margin_x, x_max + margin_x)
             ax.set_ylim(y_min - margin_y, y_max + margin_y)
 
-        # Dibujar los ejes cartesianos (X=0 e Y=0)
+        # Ejes cartesianos X=0, Y=0
         ax.axhline(0, color='black', linewidth=1.5, linestyle='-', zorder=1)
         ax.axvline(0, color='black', linewidth=1.5, linestyle='-', zorder=1)
 
-        # Dibujar ejes principales
+        # Ejes principales
         ang = np.radians(props['angulo_principal'])
-        # Longitud de los ejes principales: 60% del rango visible
         xrange = ax.get_xlim()[1] - ax.get_xlim()[0]
         yrange = ax.get_ylim()[1] - ax.get_ylim()[0]
         L = min(xrange, yrange) * 0.6
