@@ -1,14 +1,28 @@
 import numpy as np
 
+def convex_hull(pts):
+    pts = list(set(pts))
+    if len(pts) < 3:
+        return pts
+    start = min(pts, key=lambda p: (p[1], p[0]))
+    def angle(p):
+        return np.arctan2(p[1] - start[1], p[0] - start[0])
+    pts_sorted = sorted(pts, key=lambda p: (angle(p), (p[0]-start[0])**2 + (p[1]-start[1])**2))
+    hull = []
+    for p in pts_sorted:
+        while len(hull) >= 2 and cross(hull[-2], hull[-1], p) <= 0:
+            hull.pop()
+        hull.append(p)
+    return hull
+
+def cross(o, a, b):
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
 def polygon_properties(vertices):
-    """
-    Calcula área, centroide y momentos de inercia (Ix, Iy, Ixy) de un polígono
-    dado por una lista de vértices (x,y) en orden (antihorario u horario).
-    Retorna (area, centroide, Ix, Iy, Ixy) respecto al origen (0,0).
-    """
-    n = len(vertices)
-    if n < 3:
-        raise ValueError("Se necesitan al menos 3 vértices")
+    hull = convex_hull(vertices)
+    if len(hull) < 3:
+        raise ValueError("Se necesitan al menos 3 vértices no colineales.")
+    n = len(hull)
     area = 0.0
     Cx = 0.0
     Cy = 0.0
@@ -16,8 +30,8 @@ def polygon_properties(vertices):
     Iy = 0.0
     Ixy = 0.0
     for i in range(n):
-        x1, y1 = vertices[i]
-        x2, y2 = vertices[(i+1) % n]
+        x1, y1 = hull[i]
+        x2, y2 = hull[(i+1) % n]
         f = x1*y2 - x2*y1
         area += f
         Cx += (x1 + x2) * f
@@ -26,27 +40,24 @@ def polygon_properties(vertices):
         Iy += (x1**2 + x1*x2 + x2**2) * f
         Ixy += (x1*y2 + 2*x1*y1 + 2*x2*y2 + x2*y1) * f
     area = abs(area) / 2.0
-    if area == 0:
-        raise ValueError("Área cero")
+    if area < 1e-9:
+        raise ValueError("Área cero. Verifique los puntos.")
     Cx = abs(Cx) / (6.0 * area)
     Cy = abs(Cy) / (6.0 * area)
     Ix = abs(Ix) / 12.0
     Iy = abs(Iy) / 12.0
     Ixy = abs(Ixy) / 24.0
-    # Trasladar momentos al centroide (teorema de Steiner)
     Ix_c = Ix - area * Cy**2
     Iy_c = Iy - area * Cx**2
     Ixy_c = Ixy - area * Cx * Cy
     return area, (Cx, Cy), Ix_c, Iy_c, Ixy_c
 
-
 class SubArea:
     def __init__(self, tipo, params, vertices, es_vacio=False):
-        self.tipo = tipo          # 'rectangulo', 'triangulo', 'circulo'
-        self.params = params      # diccionario con parámetros originales (para referencia)
-        self.vertices = vertices  # lista de (x,y) para polígonos, None para círculo
+        self.tipo = tipo   # 'rectangulo', 'triangulo', 'circulo', 'semicirculo'
+        self.params = params
+        self.vertices = vertices  # lista de puntos para polígonos o puntos de definición
         self.es_vacio = es_vacio
-        # Calcular propiedades geométricas
         if tipo == 'circulo':
             radio = params['radio']
             centro = (params['cx'], params['cy'])
@@ -54,22 +65,27 @@ class SubArea:
             self.centroide = np.array(centro)
             self.Ix_local = (np.pi * radio**4) / 4
             self.Iy_local = self.Ix_local
-            self.Ixy_local = 0.0
+        elif tipo == 'semicirculo':
+            # Parámetros: pA, pB, pC (puntos inicial, final y medio del arco)
+            self.area = params['area']
+            self.centroide = np.array(params['centroide'])
+            self.Ix_local = params['Ix']
+            self.Iy_local = params['Iy']
+            # El producto de inercia local se asume cero para un semicírculo con base horizontal y simetría vertical
+            # pero si se rota, el producto se maneja mediante rotación fuera de esta clase.
         else:
-            # polígono: rectángulo o triángulo (o cualquier polígono dado por vértices)
-            area, centroide, Ix, Iy, Ixy = polygon_properties(vertices)
+            # polígono (rectángulo, triángulo, etc.)
+            area, centroide, Ix, Iy, _ = polygon_properties(vertices)
             self.area = area
             self.centroide = np.array(centroide)
             self.Ix_local = Ix
             self.Iy_local = Iy
-            self.Ixy_local = Ixy
 
     def get_area_efectiva(self):
         return -self.area if self.es_vacio else self.area
 
     def momento_inercia_local(self):
         return self.Ix_local, self.Iy_local
-
 
 class SeccionCompuesta:
     def __init__(self):
