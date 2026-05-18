@@ -6,7 +6,7 @@ from matplotlib.patches import Polygon as MplPolygon, Circle as MplCircle
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QLineEdit, QComboBox, QGroupBox, QFormLayout,
-                             QHeaderView, QCheckBox, QTextEdit, QMessageBox)
+                             QHeaderView, QTextEdit, QMessageBox)
 from PyQt5.QtCore import Qt
 
 from seccion import SeccionCompuesta, SubArea
@@ -44,46 +44,27 @@ class MainWindow(QMainWindow):
         self.tipo_combo.addItems(["Rectángulo", "Triángulo", "Círculo"])
         form_layout.addRow("Tipo:", self.tipo_combo)
 
-        # --- Parámetros estándar (para generación automática) ---
-        self.param1_label = QLabel("Base/Ancho (cm):")
-        self.param1_input = QLineEdit()
-        form_layout.addRow(self.param1_label, self.param1_input)
-
-        self.param2_label = QLabel("Altura (cm):")
-        self.param2_input = QLineEdit()
-        form_layout.addRow(self.param2_label, self.param2_input)
-
-        # Para triángulo escaleno (desplazamiento)
-        self.extra_label = QLabel("Desplazamiento X (cm):")
-        self.extra_input = QLineEdit("0")
-        self.extra_label.setVisible(False)
-        self.extra_input.setVisible(False)
-        form_layout.addRow(self.extra_label, self.extra_input)
-
-        # --- Opción de vértices manuales ---
-        self.use_vertices_check = QCheckBox("Usar coordenadas manuales de vértices")
-        form_layout.addRow(self.use_vertices_check)
-
+        # --- Campos para vértices (Rectángulo y Triángulo) ---
         self.vertices_label = QLabel("Vértices (x,y; x,y; ...):")
         self.vertices_text = QTextEdit()
         self.vertices_text.setPlaceholderText("Ejemplo: 0,0; 30,0; 30,20; 0,20")
-        self.vertices_text.setMaximumHeight(80)
-        self.vertices_label.setVisible(False)
-        self.vertices_text.setVisible(False)
+        self.vertices_text.setMaximumHeight(100)
         form_layout.addRow(self.vertices_label, self.vertices_text)
 
-        self.ref_label = QLabel("Punto de referencia (solo automático):")
-        self.ref_label.setStyleSheet("font-weight: bold;")
-        form_layout.addRow(self.ref_label)
+        # --- Campos para círculo ---
+        self.radio_label = QLabel("Radio (cm):")
+        self.radio_input = QLineEdit()
+        form_layout.addRow(self.radio_label, self.radio_input)
 
-        self.ref_x_label = QLabel("Coordenada X:")
-        self.ref_x_input = QLineEdit("0")
-        form_layout.addRow(self.ref_x_label, self.ref_x_input)
+        self.centro_label = QLabel("Centro (X, Y):")
+        self.centro_x_input = QLineEdit("0")
+        self.centro_y_input = QLineEdit("0")
+        centro_layout = QHBoxLayout()
+        centro_layout.addWidget(self.centro_x_input)
+        centro_layout.addWidget(self.centro_y_input)
+        form_layout.addRow(self.centro_label, centro_layout)
 
-        self.ref_y_label = QLabel("Coordenada Y:")
-        self.ref_y_input = QLineEdit("0")
-        form_layout.addRow(self.ref_y_label, self.ref_y_input)
-
+        # Tipo de área (positivo/vacío)
         self.vacio_check = QComboBox()
         self.vacio_check.addItems(["Positivo", "Vacío"])
         form_layout.addRow("Tipo de área:", self.vacio_check)
@@ -119,55 +100,32 @@ class MainWindow(QMainWindow):
 
         # Conexiones
         self.tipo_combo.currentTextChanged.connect(self.actualizar_campos_por_tipo)
-        self.use_vertices_check.stateChanged.connect(self.toggle_vertices_mode)
         self.btn_agregar.clicked.connect(self.agregar_subarea)
         self.btn_calcular.clicked.connect(self.calcular_y_dibujar)
         self.btn_limpiar.clicked.connect(self.limpiar_todo)
 
         self.actualizar_campos_por_tipo()
-        self.toggle_vertices_mode()
-
-    def toggle_vertices_mode(self):
-        visible = self.use_vertices_check.isChecked()
-        self.vertices_label.setVisible(visible)
-        self.vertices_text.setVisible(visible)
-        # Ocultar/mostrar parámetros automáticos
-        self.param1_input.setEnabled(not visible)
-        self.param2_input.setEnabled(not visible)
-        self.extra_input.setEnabled(not visible)
-        self.ref_x_input.setEnabled(not visible)
-        self.ref_y_input.setEnabled(not visible)
 
     def actualizar_campos_por_tipo(self):
         tipo = self.tipo_combo.currentText()
         if tipo == "Círculo":
-            self.param1_label.setText("Radio (cm):")
-            self.param2_label.setText("(No usar)")
-            self.param2_input.setEnabled(False)
-            self.param2_input.clear()
-            self.param1_input.setEnabled(True)
-            self.extra_label.setVisible(False)
-            self.extra_input.setVisible(False)
-            self.ref_label.setText("Punto de referencia: Centro")
-            # Para círculo no aplica vértices manuales
-            self.use_vertices_check.setEnabled(False)
-            self.use_vertices_check.setChecked(False)
-            self.toggle_vertices_mode()
+            # Mostrar campos de círculo, ocultar vértices
+            self.vertices_label.setVisible(False)
+            self.vertices_text.setVisible(False)
+            self.radio_label.setVisible(True)
+            self.radio_input.setVisible(True)
+            self.centro_label.setVisible(True)
+            self.centro_x_input.setVisible(True)
+            self.centro_y_input.setVisible(True)
         else:
-            self.use_vertices_check.setEnabled(True)
-            self.param2_input.setEnabled(True)
-            if tipo == "Rectángulo":
-                self.param1_label.setText("Ancho (cm):")
-                self.param2_label.setText("Alto (cm):")
-                self.extra_label.setVisible(False)
-                self.extra_input.setVisible(False)
-            else:  # Triángulo
-                self.param1_label.setText("Base (cm):")
-                self.param2_label.setText("Altura (cm):")
-                self.extra_label.setVisible(True)
-                self.extra_input.setVisible(True)
-            # Si estaba en modo vértices, mantener
-            self.toggle_vertices_mode()
+            # Mostrar vértices, ocultar campos de círculo
+            self.vertices_label.setVisible(True)
+            self.vertices_text.setVisible(True)
+            self.radio_label.setVisible(False)
+            self.radio_input.setVisible(False)
+            self.centro_label.setVisible(False)
+            self.centro_x_input.setVisible(False)
+            self.centro_y_input.setVisible(False)
 
     def parse_vertices(self, text):
         """Parsea una cadena con formato 'x1,y1; x2,y2; ...' y devuelve lista de (float,float)."""
@@ -194,40 +152,17 @@ class MainWindow(QMainWindow):
             es_vacio = (self.vacio_check.currentText() == "Vacío")
 
             if tipo == "Círculo":
-                radio = float(self.param1_input.text())
-                cx = float(self.ref_x_input.text())
-                cy = float(self.ref_y_input.text())
+                radio = float(self.radio_input.text())
+                cx = float(self.centro_x_input.text())
+                cy = float(self.centro_y_input.text())
                 params = {'radio': radio, 'cx': cx, 'cy': cy}
                 sa = SubArea('circulo', params, None, es_vacio)
-
             else:
-                use_manual = self.use_vertices_check.isChecked()
-                if use_manual:
-                    vertices_text = self.vertices_text.toPlainText()
-                    vertices = self.parse_vertices(vertices_text)
-                    params = {'vertices_manual': vertices}
-                    sa = SubArea(tipo.lower(), params, vertices, es_vacio)
-                else:
-                    # Generar vértices automáticamente
-                    base = float(self.param1_input.text())
-                    altura = float(self.param2_input.text())
-                    ref_x = float(self.ref_x_input.text())
-                    ref_y = float(self.ref_y_input.text())
-                    if tipo == "Rectángulo":
-                        vertices = [(ref_x, ref_y),
-                                    (ref_x + base, ref_y),
-                                    (ref_x + base, ref_y + altura),
-                                    (ref_x, ref_y + altura)]
-                        params = {'base': base, 'altura': altura, 'ref_x': ref_x, 'ref_y': ref_y}
-                    else:  # Triángulo
-                        desplazamiento = float(self.extra_input.text())
-                        desplazamiento = max(0, min(desplazamiento, base))
-                        vertices = [(ref_x, ref_y),
-                                    (ref_x + base, ref_y),
-                                    (ref_x + desplazamiento, ref_y + altura)]
-                        params = {'base': base, 'altura': altura, 'desplazamiento': desplazamiento,
-                                  'ref_x': ref_x, 'ref_y': ref_y}
-                    sa = SubArea(tipo.lower(), params, vertices, es_vacio)
+                # Rectángulo o Triángulo: usar vértices manuales
+                vertices_text = self.vertices_text.toPlainText()
+                vertices = self.parse_vertices(vertices_text)
+                params = {'vertices_manual': vertices}
+                sa = SubArea(tipo.lower(), params, vertices, es_vacio)
 
             self.seccion.agregar_subarea(sa)
             self.actualizar_tabla()
@@ -309,12 +244,9 @@ class MainWindow(QMainWindow):
                 ax.add_patch(circle)
                 ax.plot(cx, cy, 'bo', markersize=4, alpha=0.7)
             else:
-                # polígono (rectángulo o triángulo)
                 vertices = sa.vertices
                 polygon = MplPolygon(vertices, facecolor=color, edgecolor=edgecolor, alpha=alpha)
                 ax.add_patch(polygon)
-                # Marcar el primer vértice como referencia (si se generó automáticamente, es el punto de referencia)
-                ax.plot(vertices[0][0], vertices[0][1], 'bo', markersize=4, alpha=0.7)
 
         # Centroide global
         cx_glob, cy_glob = props['centroide']
