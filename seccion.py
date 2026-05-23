@@ -47,6 +47,7 @@ def polygon_properties(vertices):
     Ix = abs(Ix) / 12.0
     Iy = abs(Iy) / 12.0
     Ixy = abs(Ixy) / 24.0
+    # Trasladar momentos al centroide
     Ix_c = Ix - area * Cy**2
     Iy_c = Iy - area * Cx**2
     Ixy_c = Ixy - area * Cx * Cy
@@ -54,9 +55,9 @@ def polygon_properties(vertices):
 
 class SubArea:
     def __init__(self, tipo, params, vertices, es_vacio=False):
-        self.tipo = tipo   # 'rectangulo', 'triangulo', 'circulo', 'semicirculo'
+        self.tipo = tipo
         self.params = params
-        self.vertices = vertices  # lista de puntos para polígonos o puntos de definición
+        self.vertices = vertices
         self.es_vacio = es_vacio
         if tipo == 'circulo':
             radio = params['radio']
@@ -65,16 +66,7 @@ class SubArea:
             self.centroide = np.array(centro)
             self.Ix_local = (np.pi * radio**4) / 4
             self.Iy_local = self.Ix_local
-        elif tipo == 'semicirculo':
-            # Parámetros: pA, pB, pC (puntos inicial, final y medio del arco)
-            self.area = params['area']
-            self.centroide = np.array(params['centroide'])
-            self.Ix_local = params['Ix']
-            self.Iy_local = params['Iy']
-            # El producto de inercia local se asume cero para un semicírculo con base horizontal y simetría vertical
-            # pero si se rota, el producto se maneja mediante rotación fuera de esta clase.
         else:
-            # polígono (rectángulo, triángulo, etc.)
             area, centroide, Ix, Iy, _ = polygon_properties(vertices)
             self.area = area
             self.centroide = np.array(centroide)
@@ -113,11 +105,12 @@ class SeccionCompuesta:
         Ixy_total = 0.0
         for sa in self.subareas:
             A_efect = sa.get_area_efectiva()
-            dx = sa.centroide[0] - xc
-            dy = sa.centroide[1] - yc
+            dx = sa.centroide[0] - xc   # distancia horizontal al centroide global
+            dy = sa.centroide[1] - yc   # distancia vertical al centroide global
             Ix_loc, Iy_loc = sa.momento_inercia_local()
-            Ix_total += Ix_loc + A_efect * dy**2
-            Iy_total += Iy_loc + A_efect * dx**2
+            # Fórmulas correctas de Steiner:
+            Ix_total += Ix_loc + A_efect * dy**2   # Ix usa distancia vertical
+            Iy_total += Iy_loc + A_efect * dx**2   # Iy usa distancia horizontal
             Ixy_total += A_efect * dx * dy
 
         I_prom = (Ix_total + Iy_total) / 2

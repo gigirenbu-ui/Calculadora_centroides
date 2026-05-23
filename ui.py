@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
         layout_der.addWidget(QLabel("Cálculo del Centroide:"))
         layout_der.addWidget(self.tabla_resultados)
 
-        # Tabla de momentos (Teorema de Steiner) con intercambio de columnas
+        # Tabla de momentos (Teorema de Steiner) - SIN INTERCAMBIO
         self.tabla_momentos = QTableWidget()
         self.tabla_momentos.setColumnCount(8)
         self.tabla_momentos.setHorizontalHeaderLabels([
@@ -237,18 +237,18 @@ class MainWindow(QMainWindow):
     def actualizar_tabla_momentos(self, centroide_global):
         self.tabla_momentos.setRowCount(len(self.seccion.subareas))
         suma_A = 0.0
-        suma_dx2A = 0.0   # Esta será la suma de dₓ²·A (pero en la tabla se mostrará como dₓ²·A)
-        suma_dy2A = 0.0   # Suma de dᵧ²·A
+        suma_dx2A = 0.0   # Suma de dₓ²·A real
+        suma_dy2A = 0.0   # Suma de dᵧ²·A real
         for i, sa in enumerate(self.seccion.subareas):
             A_ef = sa.get_area_efectiva()
             Ix_loc, Iy_loc = sa.momento_inercia_local()
-            # Distancias reales (físicas)
-            dx = sa.centroide[0] - centroide_global[0]  # distancia en X
-            dy = sa.centroide[1] - centroide_global[1]  # distancia en Y
+            # Distancias reales
+            dx = sa.centroide[0] - centroide_global[0]
+            dy = sa.centroide[1] - centroide_global[1]
             dx2 = dx**2
             dy2 = dy**2
-            term_dx2A = A_ef * dx2   # contribución a Iy total (por Steiner: Iy_total += Iy_loc + A*dx²)
-            term_dy2A = A_ef * dy2   # contribución a Ix total
+            term_dx2A = A_ef * dx2
+            term_dy2A = A_ef * dy2
             suma_A += A_ef
             suma_dx2A += term_dx2A
             suma_dy2A += term_dy2A
@@ -257,21 +257,19 @@ class MainWindow(QMainWindow):
             self.tabla_momentos.setItem(i, 1, QTableWidgetItem(f"{A_ef:.2f}"))
             self.tabla_momentos.setItem(i, 2, QTableWidgetItem(f"{Ix_loc:.2f}"))
             self.tabla_momentos.setItem(i, 3, QTableWidgetItem(f"{Iy_loc:.2f}"))
-            # INTERCAMBIO: columna dₓ² muestra dy², columna dᵧ² muestra dx²
-            self.tabla_momentos.setItem(i, 4, QTableWidgetItem(f"{dy2:.2f}"))   # dₓ² (visual) = dy² real
-            self.tabla_momentos.setItem(i, 5, QTableWidgetItem(f"{dx2:.2f}"))   # dᵧ² (visual) = dx² real
-            self.tabla_momentos.setItem(i, 6, QTableWidgetItem(f"{term_dy2A:.2f}")) # dₓ²·A (visual) = dy²·A
-            self.tabla_momentos.setItem(i, 7, QTableWidgetItem(f"{term_dx2A:.2f}")) # dᵧ²·A (visual) = dx²·A
-        # Fila TOTAL con sumatorias (también intercambiadas para mantener coherencia visual)
+            # SIN INTERCAMBIO: dₓ² = dx², dᵧ² = dy²
+            self.tabla_momentos.setItem(i, 4, QTableWidgetItem(f"{dx2:.2f}"))
+            self.tabla_momentos.setItem(i, 5, QTableWidgetItem(f"{dy2:.2f}"))
+            self.tabla_momentos.setItem(i, 6, QTableWidgetItem(f"{term_dx2A:.2f}"))
+            self.tabla_momentos.setItem(i, 7, QTableWidgetItem(f"{term_dy2A:.2f}"))
+        # Fila TOTAL
         self.tabla_momentos.setRowCount(len(self.seccion.subareas) + 1)
         self.tabla_momentos.setItem(len(self.seccion.subareas), 0, QTableWidgetItem("TOTAL"))
         self.tabla_momentos.setItem(len(self.seccion.subareas), 1, QTableWidgetItem(f"{suma_A:.2f}"))
         for col in [2,3,4,5]:
             self.tabla_momentos.setItem(len(self.seccion.subareas), col, QTableWidgetItem(""))
-        # En la fila TOTAL, mostramos la suma de los valores que están en las columnas visuales
-        # Es decir, suma de dₓ²·A visual = suma de term_dy2A, y suma de dᵧ²·A visual = suma de term_dx2A
-        self.tabla_momentos.setItem(len(self.seccion.subareas), 6, QTableWidgetItem(f"{suma_dy2A:.2f}"))
-        self.tabla_momentos.setItem(len(self.seccion.subareas), 7, QTableWidgetItem(f"{suma_dx2A:.2f}"))
+        self.tabla_momentos.setItem(len(self.seccion.subareas), 6, QTableWidgetItem(f"{suma_dx2A:.2f}"))
+        self.tabla_momentos.setItem(len(self.seccion.subareas), 7, QTableWidgetItem(f"{suma_dy2A:.2f}"))
 
     def calcular_y_dibujar(self):
         if not self.seccion.subareas:
