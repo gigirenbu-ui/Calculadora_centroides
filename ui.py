@@ -50,9 +50,7 @@ class MainWindow(QMainWindow):
         self.centro_x_input = QLineEdit("0")
         self.centro_y_input = QLineEdit("0")
         centro_layout = QHBoxLayout()
-        centro_layout.addWidget(QLabel("X:"))
         centro_layout.addWidget(self.centro_x_input)
-        centro_layout.addWidget(QLabel("Y:"))
         centro_layout.addWidget(self.centro_y_input)
         form_layout.addRow(self.centro_label, centro_layout)
         form_layout.addRow(self.radio_label, self.radio_input)
@@ -97,10 +95,6 @@ class MainWindow(QMainWindow):
         layout_der.addWidget(QLabel("Cálculo de Momentos de Inercia (Teorema de Steiner):"))
         layout_der.addWidget(self.tabla_momentos)
 
-        # Botón calcular
-        self.btn_calcular = QPushButton("Calcular y Dibujar")
-        layout_der.addWidget(self.btn_calcular)
-
         # Resultados resumidos
         self.resultados_label = QLabel("Resultados:\n")
         self.resultados_label.setWordWrap(True)
@@ -115,7 +109,6 @@ class MainWindow(QMainWindow):
         # Conexiones
         self.tipo_combo.currentTextChanged.connect(self.actualizar_campos_por_tipo)
         self.btn_agregar.clicked.connect(self.agregar_subarea)
-        self.btn_calcular.clicked.connect(self.calcular_y_dibujar)
         self.btn_limpiar.clicked.connect(self.limpiar_todo)
 
         self.actualizar_campos_por_tipo()
@@ -241,7 +234,7 @@ class MainWindow(QMainWindow):
         suma_dy2A = 0.0   # Suma de dᵧ²·A real
         for i, sa in enumerate(self.seccion.subareas):
             A_ef = sa.get_area_efectiva()
-            Ix_loc, Iy_loc = sa.momento_inercia_local()
+            text_I_x_l_value, Iy_loc = sa.momento_inercia_local()
             # Distancias reales
             dx = sa.centroide[0] - centroide_global[0]
             dy = sa.centroide[1] - centroide_global[1]
@@ -255,7 +248,7 @@ class MainWindow(QMainWindow):
             nombre = f"{sa.tipo.capitalize()} {'(vacío)' if sa.es_vacio else ''}"
             self.tabla_momentos.setItem(i, 0, QTableWidgetItem(nombre))
             self.tabla_momentos.setItem(i, 1, QTableWidgetItem(f"{A_ef:.2f}"))
-            self.tabla_momentos.setItem(i, 2, QTableWidgetItem(f"{Ix_loc:.2f}"))
+            self.tabla_momentos.setItem(i, 2, QTableWidgetItem(f"{text_I_x_l_value:.2f}"))
             self.tabla_momentos.setItem(i, 3, QTableWidgetItem(f"{Iy_loc:.2f}"))
             # SIN INTERCAMBIO: dₓ² = dx², dᵧ² = dy²
             self.tabla_momentos.setItem(i, 4, QTableWidgetItem(f"{dx2:.2f}"))
