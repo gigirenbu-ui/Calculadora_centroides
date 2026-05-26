@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.patches import Polygon as MplPolygon, Circle as MplCircle
+from matplotlib.patches import Polygon as MplPolygon, Circle as MplCircle, Wedge as MplWedge
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QLineEdit, QComboBox, QGroupBox, QFormLayout,
@@ -40,8 +40,16 @@ class MainWindow(QMainWindow):
         form_layout = QFormLayout()
 
         self.tipo_combo = QComboBox()
-        self.tipo_combo.addItems(["Rectángulo", "Triángulo", "Círculo"])
+        self.tipo_combo.addItems(["Rectángulo", "Triángulo", "Círculo", "Semicírculo"])
         form_layout.addRow("Tipo:", self.tipo_combo)
+
+        # Desplegable de orientación direccional (Exclusivo Semicírculo)
+        self.orientacion_label = QLabel("Orientación de curva:")
+        self.orientacion_combo = QComboBox()
+        self.orientacion_combo.addItems(["Arriba", "Abajo", "Izquierda", "Derecha"])
+        self.orientacion_label.setVisible(False)
+        self.orientacion_combo.setVisible(False)
+        form_layout.addRow(self.orientacion_label, self.orientacion_combo)
 
         # Círculo
         self.radio_label = QLabel("Radio (cm):")
@@ -84,7 +92,7 @@ class MainWindow(QMainWindow):
         layout_der.addWidget(QLabel("Cálculo del Centroide:"))
         layout_der.addWidget(self.tabla_resultados)
 
-        # Tabla de momentos (Teorema de Steiner) - SIN INTERCAMBIO
+        # Tabla de momentos (Teorema de Steiner)
         self.tabla_momentos = QTableWidget()
         self.tabla_momentos.setColumnCount(8)
         self.tabla_momentos.setHorizontalHeaderLabels([
@@ -120,12 +128,16 @@ class MainWindow(QMainWindow):
                 widget.deleteLater()
         self.vertices_widgets.clear()
         tipo = self.tipo_combo.currentText()
+        
         if tipo == "Rectángulo":
             etiquetas = ["Vértice 1", "Vértice 2", "Vértice 3", "Vértice 4"]
         elif tipo == "Triángulo":
             etiquetas = ["Vértice 1", "Vértice 2", "Vértice 3"]
+        elif tipo == "Semicírculo":
+            etiquetas = ["Extremo Base 1", "Extremo Base 2"]
         else:
             etiquetas = [f"Vértice {i+1}" for i in range(num_vertices)]
+            
         for i in range(num_vertices):
             frame = QFrame()
             frame_layout = QHBoxLayout(frame)
@@ -144,6 +156,14 @@ class MainWindow(QMainWindow):
 
     def actualizar_campos_por_tipo(self):
         tipo = self.tipo_combo.currentText()
+        
+        if tipo == "Semicírculo":
+            self.orientacion_label.setVisible(True)
+            self.orientacion_combo.setVisible(True)
+        else:
+            self.orientacion_label.setVisible(False)
+            self.orientacion_combo.setVisible(False)
+
         if tipo == "Círculo":
             self.vertices_group.setVisible(False)
             self.radio_label.setVisible(True)
@@ -158,7 +178,15 @@ class MainWindow(QMainWindow):
             self.centro_label.setVisible(False)
             self.centro_x_input.setVisible(False)
             self.centro_y_input.setVisible(False)
-            num = 4 if tipo == "Rectángulo" else 3
+            
+            if tipo == "Rectángulo":
+                num = 4
+            elif tipo == "Triángulo":
+                num = 3
+            elif tipo == "Semicírculo":
+                num = 2
+            else:
+                num = 3
             self.construir_vertices_dinamicos(num)
 
     def obtener_vertices_desde_inputs(self):
@@ -167,7 +195,7 @@ class MainWindow(QMainWindow):
             x_text = x_input.text().strip()
             y_text = y_input.text().strip()
             if not x_text or not y_text:
-                raise ValueError(f"Faltan coordenadas para el vértice {i+1}")
+                raise ValueError(f"Faltan coordenadas para el componente {i+1}")
             vertices.append((float(x_text), float(y_text)))
         return vertices
 
@@ -175,12 +203,19 @@ class MainWindow(QMainWindow):
         try:
             tipo = self.tipo_combo.currentText()
             es_vacio = (self.vacio_check.currentText() == "Vacío")
+            
             if tipo == "Círculo":
                 radio = float(self.radio_input.text())
                 cx = float(self.centro_x_input.text())
                 cy = float(self.centro_y_input.text())
                 params = {'radio': radio, 'cx': cx, 'cy': cy}
                 sa = SubArea('circulo', params, None, es_vacio)
+            elif tipo == "Semicírculo":
+                vertices = self.obtener_vertices_desde_inputs()
+                if len(vertices) != 2:
+                    raise ValueError("El semicírculo requiere exactamente 2 puntos base.")
+                params = {'orientacion': self.orientacion_combo.currentText()}
+                sa = SubArea('semicirculo', params, vertices, es_vacio)
             else:
                 vertices = self.obtener_vertices_desde_inputs()
                 if tipo == "Rectángulo" and len(vertices) != 4:
@@ -217,7 +252,6 @@ class MainWindow(QMainWindow):
             self.tabla_resultados.setItem(i, 4, QTableWidgetItem(f"{yc:.2f}"))
             self.tabla_resultados.setItem(i, 5, QTableWidgetItem(f"{xA:.2f}"))
             self.tabla_resultados.setItem(i, 6, QTableWidgetItem(f"{yA:.2f}"))
-        # Fila total
         self.tabla_resultados.setRowCount(len(self.seccion.subareas) + 1)
         self.tabla_resultados.setItem(len(self.seccion.subareas), 0, QTableWidgetItem("TOTAL"))
         self.tabla_resultados.setItem(len(self.seccion.subareas), 1, QTableWidgetItem(f"{suma_A:.2f}"))
@@ -230,12 +264,11 @@ class MainWindow(QMainWindow):
     def actualizar_tabla_momentos(self, centroide_global):
         self.tabla_momentos.setRowCount(len(self.seccion.subareas))
         suma_A = 0.0
-        suma_dx2A = 0.0   # Suma de dₓ²·A real
-        suma_dy2A = 0.0   # Suma de dᵧ²·A real
+        suma_dx2A = 0.0   
+        suma_dy2A = 0.0   
         for i, sa in enumerate(self.seccion.subareas):
             A_ef = sa.get_area_efectiva()
-            text_I_x_l_value, Iy_loc = sa.momento_inercia_local()
-            # Distancias reales
+            Ix_loc, Iy_loc = sa.momento_inercia_local()
             dx = sa.centroide[0] - centroide_global[0]
             dy = sa.centroide[1] - centroide_global[1]
             dx2 = dx**2
@@ -248,14 +281,12 @@ class MainWindow(QMainWindow):
             nombre = f"{sa.tipo.capitalize()} {'(vacío)' if sa.es_vacio else ''}"
             self.tabla_momentos.setItem(i, 0, QTableWidgetItem(nombre))
             self.tabla_momentos.setItem(i, 1, QTableWidgetItem(f"{A_ef:.2f}"))
-            self.tabla_momentos.setItem(i, 2, QTableWidgetItem(f"{text_I_x_l_value:.2f}"))
+            self.tabla_momentos.setItem(i, 2, QTableWidgetItem(f"{Ix_loc:.2f}"))
             self.tabla_momentos.setItem(i, 3, QTableWidgetItem(f"{Iy_loc:.2f}"))
-            # SIN INTERCAMBIO: dₓ² = dx², dᵧ² = dy²
             self.tabla_momentos.setItem(i, 4, QTableWidgetItem(f"{dx2:.2f}"))
             self.tabla_momentos.setItem(i, 5, QTableWidgetItem(f"{dy2:.2f}"))
             self.tabla_momentos.setItem(i, 6, QTableWidgetItem(f"{term_dx2A:.2f}"))
             self.tabla_momentos.setItem(i, 7, QTableWidgetItem(f"{term_dy2A:.2f}"))
-        # Fila TOTAL
         self.tabla_momentos.setRowCount(len(self.seccion.subareas) + 1)
         self.tabla_momentos.setItem(len(self.seccion.subareas), 0, QTableWidgetItem("TOTAL"))
         self.tabla_momentos.setItem(len(self.seccion.subareas), 1, QTableWidgetItem(f"{suma_A:.2f}"))
@@ -301,12 +332,25 @@ class MainWindow(QMainWindow):
             color = 'lightgray' if not sa.es_vacio else 'white'
             edgecolor = 'black'
             alpha = 0.6 if not sa.es_vacio else 0.8
+            
             if sa.tipo == 'circulo':
                 radio = sa.params['radio']
                 cx, cy = sa.centroide
                 circle = MplCircle((cx, cy), radio, facecolor=color, edgecolor=edgecolor, alpha=alpha)
                 ax.add_patch(circle)
                 ax.plot(cx, cy, 'b.', markersize=6, alpha=0.8)
+                
+            elif sa.tipo == 'semicirculo':
+                radio = sa.params['radio']
+                p_medio = sa.params['p_medio']
+                angulo_base = sa.params['angulo_base']
+                
+                wedge = MplWedge(p_medio, radio, angulo_base, angulo_base + 180.0,
+                                 facecolor=color, edgecolor=edgecolor, alpha=alpha)
+                ax.add_patch(wedge)
+                cx_fig, cy_fig = sa.centroide
+                ax.plot(cx_fig, cy_fig, 'b.', markersize=6, alpha=0.8)
+                
             else:
                 from seccion import convex_hull
                 hull = convex_hull(sa.vertices)
@@ -315,11 +359,9 @@ class MainWindow(QMainWindow):
                 cx_fig, cy_fig = sa.centroide
                 ax.plot(cx_fig, cy_fig, 'b.', markersize=6, alpha=0.8)
 
-        # Centroide global
         cx_glob, cy_glob = props['centroide']
         ax.plot(cx_glob, cy_glob, 'ro', markersize=8, label='Centroide global')
 
-        # Límites
         x_vals = [0]; y_vals = [0]
         for sa in self.seccion.subareas:
             if sa.tipo == 'circulo':
@@ -327,9 +369,15 @@ class MainWindow(QMainWindow):
                 cx, cy = sa.centroide
                 x_vals.extend([cx - r, cx + r])
                 y_vals.extend([cy - r, cy + r])
+            elif sa.tipo == 'semicirculo':
+                r = sa.params['radio']
+                cx, cy = sa.centroide
+                x_vals.extend([cx - r, cx + r])
+                y_vals.extend([cy - r, cy + r])
             else:
                 for v in sa.vertices:
                     x_vals.append(v[0]); y_vals.append(v[1])
+                    
         if x_vals and y_vals:
             x_min, x_max = min(x_vals), max(x_vals)
             y_min, y_max = min(y_vals), max(y_vals)
@@ -338,11 +386,9 @@ class MainWindow(QMainWindow):
             ax.set_xlim(x_min - margin_x, x_max + margin_x)
             ax.set_ylim(y_min - margin_y, y_max + margin_y)
 
-        # Ejes cartesianos
         ax.axhline(0, color='black', linewidth=1.5, linestyle='-', zorder=1)
         ax.axvline(0, color='black', linewidth=1.5, linestyle='-', zorder=1)
 
-        # Ejes principales
         ang = np.radians(props['angulo_principal'])
         xrange = ax.get_xlim()[1] - ax.get_xlim()[0]
         yrange = ax.get_ylim()[1] - ax.get_ylim()[0]
@@ -369,3 +415,6 @@ def run():
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    run()
